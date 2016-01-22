@@ -1,0 +1,103 @@
+package TrackerManager;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.* ;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+
+import Bencode.Decoding;
+import BencodeType.Dictionary;
+public class Tracker {
+	
+	private String announce ;
+	private HttpURLConnection connexion ;
+	private List announce_list ;
+	private Long interval;
+	private Long minInterval;
+    private String trackerId;
+	private Long complete;
+	private Long incomplete;
+	
+	public Tracker(){
+		
+	}
+	
+	public Tracker(String tracker_address, List announce_list){
+		this.announce = tracker_address ;
+		this.announce_list = announce_list ;
+	}
+	
+	public String setTrackerRequest(Torrent torrent) throws Exception{
+		String url_request = "";
+		url_request += announce+"?";
+		url_request += "info_hash="+torrent.getInfoHash()+"&" ;
+		url_request += "peer_id="+TextUtil.urlEncode(torrent.getPeerId())+"&";
+		url_request += "port=6881&";
+		url_request += "uploaded=0&" ;
+		url_request += "downloaded=0&";
+		url_request += "left=0&";
+		url_request += "compact="+torrent.COMPACT+"&" ;
+		url_request += "event="+torrent.STARTED ;
+		
+		return url_request ;
+		
+	}
+	
+	public void performRequest(Torrent torrent) throws Exception{
+		
+		String url = this.setTrackerRequest(torrent);
+		URL obj = new URL(url);
+		this.connexion = (HttpURLConnection)obj.openConnection();
+		connexion.setRequestMethod("GET");
+		
+		int responseCode = connexion.getResponseCode();
+		System.out.println("\nSending 'GET' request to URL : " + url);
+		System.out.println("Response Code : " + responseCode);
+		
+		BufferedInputStream data = new BufferedInputStream(connexion.getInputStream());
+		byte[] byte_data = to_bytearray(data);
+		ByteBuffer buffer = ByteBuffer.wrap(byte_data) ;
+		buffer.get() ;
+		Dictionary dico = Decoding.parseBencodeDictionary(buffer) ;
+		
+		//System.out.println(dico);
+		
+		if(dico.getContenu().containsKey("complete"))
+			this.complete = new Long((Integer)dico.getContenu().get("complete"));
+		if(dico.getContenu().containsKey("incomplete"))
+			this.incomplete = new Long((Integer)dico.getContenu().get("incomplete"));
+		if(dico.getContenu().containsKey("interval"))
+			this.interval = new Long((Integer)dico.getContenu().get("interval"));
+		if(dico.getContenu().containsKey("trackerId"))
+			this.trackerId = (String)dico.getContenu().get("trackerId");
+		if(dico.getContenu().containsKey("peers")){
+			HashMap<String,Integer> peers_list = (HashMap)Dictionary.getPeersList((byte [])dico.getContenu().get("peers"));
+			torrent.setPeers(peers_list);
+		}
+		
+
+	}
+	
+	public String toString(){
+		String result = "" ;
+		result+="announce : "+announce+"\n" ;
+		result+="announce-list : \n" ;
+		for(Object tracker : announce_list){
+			result+= tracker.toString()+"\n";
+		}
+		
+		
+		return result ;
+	}
+	
+	public static byte[] to_bytearray(InputStream data) throws Exception {
+	     byte[] array = new byte[data.available()];
+			data.read(array);
+	     return array;
+	}
+
+}
